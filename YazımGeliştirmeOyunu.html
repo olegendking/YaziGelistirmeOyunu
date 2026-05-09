@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Uzay Temalı Yazma Oyunu</title>
+<style>
+    body {
+        margin: 0;
+        background: radial-gradient(circle at center, #0b0c2d, #000);
+        overflow: hidden;
+        font-family: 'Courier New', monospace;
+    }
+    canvas {
+        display: block;
+    }
+    #typingArea {
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 95%;
+        font-size: 32px;
+        color: #0ff;
+        background: rgba(0,0,0,0.5);
+        border: 2px solid #0ff;
+        padding: 8px;
+        outline: none;
+    }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<input type="text" id="typingArea" autocomplete="off" placeholder="Type here..." autofocus>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// Kutu sınırları artık neredeyse kenarda
+const padding = 10;
+const leftX = padding;
+const rightX = canvas.width - padding;
+const topY = padding;
+const bottomY = canvas.height - 120;
+
+const centerX = canvas.width / 2;
+const centerY = bottomY - 150; // gemi kutu içinde
+const circleRadius = 120;
+
+const wordsPool = ["welcome","space","galaxy","rocket","star","planet","moon","asteroid","comet","orbit",
+"alien","spaceship","laser","cosmos","universe","gravity","meteor","explore","nebula","blackhole",
+"telescope","astronaut","launch","satellite","constellation","mission","celestial","supernova",
+"eclipse","probe","interstellar","quantum","pulsar","radiation","lightyear","dimension","warp",
+"hyperspace","trajectory","module","capsule","rocketfuel","iondrive","thruster","docking",
+"extravehicular","navigation","asterism","lunar","stellar","quasar","eventhorizon","milk","gate","water","sugar","salad"
+,"menu","is","a","where","you","your"];
+
+let activeWords = [];
+const maxActiveWords = 5;
+const typedInput = document.getElementById('typingArea');
+let lasers = [];
+let explosions = [];
+
+class Word {
+    constructor(text) {
+        this.text = text;
+        this.width = text.length * 36;
+        this.x = Math.random() * (rightX - leftX - this.width) + leftX;
+        this.y = topY;
+        this.speed = 0.5 + Math.random() * 0.5;
+        this.currentIndex = 0;
+        this.completed = false;
+    }
+    draw() {
+        ctx.font = "bold 36px Courier New";
+        for(let i=0;i<this.text.length;i++){
+            ctx.fillStyle = (i<this.currentIndex)?"#0ff":"#fff";
+            ctx.fillText(this.text[i], this.x + i*36, this.y);
+        }
+    }
+    update(){
+        if(!this.completed){
+            this.y += this.speed;
+            if(this.y > bottomY - 36) this.y = bottomY - 36;
+        }
+    }
+}
+
+class Laser{
+    constructor(word){
+        this.word = word;
+        this.progress = 0;
+        this.startX = centerX;
+        this.startY = centerY;
+        this.endX = word.x + word.currentIndex*36 + 18;
+        this.endY = word.y - 18;
+    }
+    draw(){
+        this.progress += 0.1;
+        let dx = this.endX - this.startX;
+        let dy = this.endY - this.startY;
+        ctx.strokeStyle = "#0ff";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(this.startX, this.startY);
+        ctx.lineTo(this.startX + dx*this.progress, this.startY + dy*this.progress);
+        ctx.stroke();
+    }
+}
+
+class Explosion{
+    constructor(x,y){
+        this.x = x;
+        this.y = y;
+        this.particles = [];
+        for(let i=0;i<15;i++){
+            this.particles.push({
+                x: x,
+                y: y,
+                vx: (Math.random()-0.5)*6,
+                vy: (Math.random()-0.5)*6,
+                alpha: 1,
+                color: `hsl(${Math.random()*360},100%,50%)`
+            });
+        }
+    }
+    draw(){
+        this.particles.forEach(p=>{
+            ctx.globalAlpha = p.alpha;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x,p.y,Math.random()*10+5,0,Math.PI*2);
+            ctx.fill();
+            p.x += p.vx;
+            p.y += p.vy;
+            p.alpha -= 0.03;
+        });
+        ctx.globalAlpha = 1;
+        this.particles = this.particles.filter(p=>p.alpha>0);
+    }
+}
+
+function drawShip(){
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.beginPath();
+    ctx.moveTo(0,-30);
+    ctx.lineTo(-20,30);
+    ctx.lineTo(20,30);
+    ctx.closePath();
+    ctx.fillStyle = "#0ff";
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawCircle(){
+    ctx.beginPath();
+    ctx.setLineDash([5,5]);
+    ctx.arc(centerX,centerY,circleRadius,0,Math.PI*2);
+    ctx.strokeStyle = "#0ff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.setLineDash([]);
+}
+
+function drawBox(){
+    ctx.strokeStyle = "#0ff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(leftX,topY);
+    ctx.lineTo(rightX,topY);
+    ctx.lineTo(rightX,bottomY);
+    ctx.lineTo(leftX,bottomY);
+    ctx.closePath();
+    ctx.stroke();
+}
+
+function spawnWord(){
+    if(activeWords.length<maxActiveWords){
+        let newWord = new Word(wordsPool[Math.floor(Math.random()*wordsPool.length)]);
+        activeWords.push(newWord);
+    }
+}
+
+function animate(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    drawBox();
+    drawCircle();
+    drawShip();
+    activeWords.forEach(w=>{ w.update(); w.draw(); });
+    lasers.forEach(l=>l.draw());
+    lasers = lasers.filter(l=>l.progress<1);
+    explosions.forEach(e=>e.draw());
+    explosions = explosions.filter(e=>e.particles.length>0);
+    requestAnimationFrame(animate);
+}
+
+typedInput.addEventListener('input', ()=>{
+    const input = typedInput.value;
+    activeWords.forEach(word=>{
+        if(!word.completed && input[word.currentIndex]===word.text[word.currentIndex]){
+            word.currentIndex++;
+            lasers.push(new Laser(word));
+            if(word.currentIndex === word.text.length){
+                word.completed = true;
+                explosions.push(new Explosion(word.x + word.currentIndex*18, word.y - 18));
+                setTimeout(()=>{
+                    const index = activeWords.indexOf(word);
+                    if(index>-1) activeWords.splice(index,1);
+                },100);
+                typedInput.value = '';
+            }
+        }
+    });
+});
+
+setInterval(spawnWord,2000);
+animate();
+</script>
+</body>
+</html>
